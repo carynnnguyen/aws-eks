@@ -1,0 +1,16 @@
+aws_region              = "eu-west-1"
+availability_zones      = ["eu-west-1a", "eu-west-1b"]
+cluster_name            = "cluster"
+k8s_version             = "1.27"
+node_instance_type      = "t3.large"
+root_block_size         = "10"
+desired_capacity        = "3"
+max_size                = "6"
+min_size                = "1"
+sumo_node_instance_type = "t3.medium"
+vpc_subnet_cidr         = "10.0.0.0/16"
+private_subnet_cidr     = ["10.0.0.0/19", "10.0.32.0/19"]
+public_subnet_cidr      = ["10.0.128.0/20", "10.0.144.0/20"]
+db_subnet_cidr          = ["10.0.192.0/21", "10.0.200.0/21"]
+eks_cw_logging          = ["api", "authenticator"]
+ec2_key_public_key      = ""

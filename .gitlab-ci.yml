@@ -1,0 +1,80 @@
+image:
+  name: hashicorp/terraform:${TERRAFORM_VERSION}
+  entrypoint: ["/bin/sh", "-c"]
+
+.rules_tf:
+  extends: [".rules_base"]
+  variables:
+    RULES_CHANGES_PATH: "cce/deployment/terraform/aws-eks/**/*"
+
+.rules_deploy_eks:
+  rules:
+    - if: $DOCKER_PERIODIC_CLEANUP == "true"
+      when: never
+    - if: $CI_DEPLOY_FREEZE != null
+      when: never
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+      allow_failure: true
+    - when: never
+
+
+variables:
+  TERRAFORM_VERSION: 1.1.2
+
+.terraform-ver-init: &terraform-ver-init
+  - mkdir -p $HOME/.aws
+  - cp $AWS_CREDENTIALS ~/.aws/credentials
+  - cp $AWS_CONFIG ~/.aws/config
+  - cd cce/deployment/terraform/aws-eks/
+  - terraform version
+  - terraform init
+
+test terraform validate for cce eks:
+  extends: ".rules_tf"
+  needs: []
+  stage: test
+  before_script:
+    - *terraform-ver-init
+  script:
+    - terraform validate
+
+test terraform format for cce eks:
+  extends: ".rules_tf"
+  stage: test
+  script:
+    - terraform fmt -list=true -write=false -diff=true -check=true -recursive
+
+terraform plan for cce eks:
+  stage: deploy_cce
+  extends: ".rules_deploy_eks"
+  before_script:
+    - *terraform-ver-init
+  variables:
+    PLAN: eks-plan.tfplan
+    JSON_PLAN_FILE: eks-plan.json
+  script:
+    - apk add --update jq
+    - alias convert_report="jq -r '([.resource_changes[]?.change.actions?]|flatten)|{\"create\":(map(select(.==\"create\"))|length),\"update\":(map(select(.==\"update\"))|length),\"delete\":(map(select(.==\"delete\"))|length)}'"
+    - terraform plan -out=$PLAN -input=false
+    - "terraform show -json $PLAN | convert_report > $JSON_PLAN_FILE"
+    - mv $PLAN $JSON_PLAN_FILE $CI_PROJECT_DIR
+  artifacts:
+    name: cce-plan
+    paths:
+      - $PLAN
+    reports:
+      terraform: $JSON_PLAN_FILE
+    expire_in: 7 day
+  needs:
+    - "test terraform validate for cce eks"
+
+terraform apply for cce:
+  stage: deploy_cce
+  extends: ".rules_deploy_eks"
+  before_script:
+    - *terraform-ver-init
+  script:
+    - terraform apply -auto-approve
+  needs:
+    - "test terraform validate for cce eks"
